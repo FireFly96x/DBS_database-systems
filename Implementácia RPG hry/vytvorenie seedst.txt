@@ -1,0 +1,227 @@
+-- -------------------------------------------------------------
+--  TESTOVACÍ SCENÁR
+--  15 postáv, tri súboje (A, B, C), plus akcie mimo boja
+-- -------------------------------------------------------------
+DO
+$$
+    DECLARE
+        /* ID postáv */
+        margotka INT; thorin  INT; elowen INT; althaea INT;  liana   INT;
+        cedric   INT; rowan   INT; sylvara INT; kaelen  INT;  vanya   INT;
+        oren     INT; nymeria INT; farin   INT; arannis INT;  isolde  INT;
+
+        /* ID bojov */
+        combat_a INT;
+        combat_b INT;
+        combat_c INT;
+    BEGIN
+        ----------------------------------------------------------------
+        -- 1. Vytvorenie 15 postáv
+        ----------------------------------------------------------------
+        PERFORM sp_create_character('Margotka', 5, TRUE);      -- Mage
+        PERFORM sp_create_character('Thorin',   1, TRUE);      -- Warrior
+        PERFORM sp_create_character('Elowen',   2, TRUE);      -- Elf
+        PERFORM sp_create_character('Althaea',  4, TRUE);      -- Paladin
+        PERFORM sp_create_character('Liana',    6, TRUE);      -- Hunter
+        PERFORM sp_create_character('Cedric',   3, FALSE);     -- Dwarf
+        PERFORM sp_create_character('Rowan',    6, FALSE);     -- Hunter
+        PERFORM sp_create_character('Sylvara',  5, FALSE);     -- Mage
+        PERFORM sp_create_character('Kaelen',   4, FALSE);     -- Paladin
+        PERFORM sp_create_character('Vanya',    2, FALSE);     -- Elf
+        PERFORM sp_create_character('Oren',     1, FALSE);     -- Warrior
+        PERFORM sp_create_character('Nymeria',  6, TRUE);      -- Hunter
+        PERFORM sp_create_character('Farin',    3, TRUE);      -- Dwarf
+        PERFORM sp_create_character('Arannis',  5, FALSE);     -- Mage
+        PERFORM sp_create_character('Isolde',   2, TRUE);      -- Elf
+
+        /* priradenie ID premenným */
+        SELECT id INTO margotka FROM "Character" WHERE name='Margotka';
+        SELECT id INTO thorin   FROM "Character" WHERE name='Thorin';
+        SELECT id INTO elowen   FROM "Character" WHERE name='Elowen';
+        SELECT id INTO althaea  FROM "Character" WHERE name='Althaea';
+        SELECT id INTO liana    FROM "Character" WHERE name='Liana';
+        SELECT id INTO cedric   FROM "Character" WHERE name='Cedric';
+        SELECT id INTO rowan    FROM "Character" WHERE name='Rowan';
+        SELECT id INTO sylvara  FROM "Character" WHERE name='Sylvara';
+        SELECT id INTO kaelen   FROM "Character" WHERE name='Kaelen';
+        SELECT id INTO vanya    FROM "Character" WHERE name='Vanya';
+        SELECT id INTO oren     FROM "Character" WHERE name='Oren';
+        SELECT id INTO nymeria  FROM "Character" WHERE name='Nymeria';
+        SELECT id INTO farin    FROM "Character" WHERE name='Farin';
+        SELECT id INTO arannis  FROM "Character" WHERE name='Arannis';
+        SELECT id INTO isolde   FROM "Character" WHERE name='Isolde';
+
+        ----------------------------------------------------------------
+        -- 2. Predbojové pick/use mimo combatu
+        ----------------------------------------------------------------
+        PERFORM sp_pick_item(sylvara , 2);   -- potion
+        PERFORM sp_pick_item(sylvara ,10);   -- bow
+
+        PERFORM sp_pick_item(kaelen  ,11);   -- quiver
+
+        PERFORM sp_pick_item(rowan   , 4);   -- poison
+        PERFORM sp_pick_item(rowan   , 6);   -- axe
+
+        PERFORM sp_pick_item(vanya   , 3);   -- great potion
+        PERFORM sp_pick_item(oren    , 2);   -- potion
+        PERFORM sp_pick_item(arannis , 9);   -- staff
+
+        ----------------------------------------------------------------
+        -- 3. Combat A – malý trojčlenný
+        ----------------------------------------------------------------
+        SELECT sp_start_combat(ARRAY[margotka, cedric, rowan]) INTO combat_a; -- aliance, enemy, enemy
+
+        -- kolo 1
+        PERFORM sp_take_turn('spell_cast',  margotka, cedric , 1);
+        PERFORM sp_take_turn('spell_cast',  margotka, cedric , 1);
+        PERFORM sp_take_turn('pass',        margotka, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', cedric  , margotka, NULL);
+        PERFORM sp_take_turn('auto_attack', cedric  , margotka, NULL);
+        PERFORM sp_take_turn('pass',        cedric  , NULL, NULL);
+
+        PERFORM sp_take_turn('use_item',    rowan   , margotka, 4);
+        PERFORM sp_take_turn('spell_cast',  rowan   , margotka, 6);
+        PERFORM sp_take_turn('pass',        rowan   , NULL, NULL);
+
+        -- kolo 2 (fokus Cedric)
+        PERFORM sp_take_turn('spell_cast',  margotka, cedric , 1);
+        PERFORM sp_take_turn('spell_cast',  margotka, cedric , 1);
+        PERFORM sp_take_turn('pass',        margotka, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', rowan   , margotka, NULL);
+        PERFORM sp_take_turn('pass',        rowan   , NULL, NULL);
+
+        -- Cedric padne (interná logika)
+
+        -- kolo 3 – Thorin vstupuje
+        PERFORM sp_enter_combat(combat_a, thorin);
+
+        PERFORM sp_take_turn('spell_cast',  thorin  , rowan, 4);  -- Cleave
+        PERFORM sp_take_turn('auto_attack', thorin  , rowan, NULL);
+        PERFORM sp_take_turn('auto_attack', thorin  , rowan, NULL);
+
+        PERFORM sp_take_turn('spell_cast',  margotka, rowan, 1);
+        PERFORM sp_take_turn('pass',        margotka, NULL , NULL);
+
+        PERFORM sp_take_turn('spell_cast',  rowan   , margotka, 6);
+        PERFORM sp_take_turn('pass',        rowan   , NULL, NULL);
+
+        -- Rowan padol, combat skončil
+
+        -- post-combat A: Margotka lieči seba
+        PERFORM sp_pick_item(margotka, 2);
+        PERFORM sp_use_item(margotka, 2, margotka);
+
+        ----------------------------------------------------------------
+        -- 4. Combat B – štvorčlenný súboj
+        ----------------------------------------------------------------
+        SELECT sp_start_combat(ARRAY[nymeria, farin, kaelen, vanya]) INTO combat_b; -- aliance, aliance, enemy, enemy
+
+        ----------------------------------------------------------------
+        -- 5. Combat C – dvojčlenný súboj, štartuje paralelne s B
+        ----------------------------------------------------------------
+        SELECT sp_start_combat(ARRAY[althaea, arannis]) INTO combat_c; -- aliance, enemy
+
+        ----------------------------------------------------------------
+        -- Interleaving: B kolo 1  →  C kolo 1  →  B kolo 2  →  C kolo 2 … pre prehľadnosť
+        ----------------------------------------------------------------
+
+        -- ------------- Combat B – kolo 1 -----------------------------
+        PERFORM sp_take_turn('spell_cast',  nymeria, vanya , 2);  -- IceArrow
+        PERFORM sp_take_turn('auto_attack', nymeria, vanya , NULL);
+        PERFORM sp_take_turn('pass',        nymeria, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', farin  , vanya , NULL);
+        PERFORM sp_take_turn('auto_attack', farin  , vanya , NULL);
+        PERFORM sp_take_turn('pass',        farin  , NULL , NULL);
+
+        PERFORM sp_take_turn('spell_cast',  kaelen , kaelen, 8);  -- Smite self
+        PERFORM sp_take_turn('auto_attack', kaelen , nymeria, NULL);
+        PERFORM sp_take_turn('pass',        kaelen , NULL, NULL);
+
+        PERFORM sp_take_turn('spell_cast',  vanya  , nymeria, 2); -- IceArrow
+        PERFORM sp_take_turn('pass',        vanya  , NULL, NULL);
+
+        -- ------------- Combat C – kolo 1 -----------------------------
+        PERFORM sp_take_turn('spell_cast',  althaea, arannis, 5);  -- ThunderCry
+        PERFORM sp_take_turn('auto_attack', althaea, arannis, NULL);
+        PERFORM sp_take_turn('pass',        althaea, NULL, NULL);
+
+        PERFORM sp_take_turn('spell_cast',  arannis, althaea, 1);  -- Fireball
+        PERFORM sp_take_turn('spell_cast',  arannis, althaea, 6);  -- ShadowBolt
+        PERFORM sp_take_turn('pass',        arannis, NULL, NULL);
+
+        -- ------------- Combat B – kolo 2 (doraz Vanyu) --------------
+        PERFORM sp_take_turn('auto_attack', nymeria, vanya , NULL);
+        PERFORM sp_take_turn('auto_attack', nymeria, vanya , NULL);
+        PERFORM sp_take_turn('pass',        nymeria, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', farin  , vanya , NULL);
+        PERFORM sp_take_turn('auto_attack', farin  , vanya , NULL);
+        PERFORM sp_take_turn('pass',        farin  , NULL , NULL);
+        -- Vanya padne
+
+        PERFORM sp_take_turn('spell_cast',  kaelen , farin , 5);  -- ThunderCry
+        PERFORM sp_take_turn('auto_attack', kaelen , farin , NULL);
+        PERFORM sp_take_turn('pass',        kaelen , NULL, NULL);
+
+        -- ------------- Combat C – kolo 2 -----------------------------
+        PERFORM sp_take_turn('auto_attack', althaea, arannis, NULL);
+        PERFORM sp_take_turn('auto_attack', althaea, arannis, NULL);
+        PERFORM sp_take_turn('pass',        althaea, NULL, NULL);
+
+        PERFORM sp_take_turn('spell_cast',  arannis, althaea, 1);  -- Fireball
+        PERFORM sp_take_turn('pass',        arannis, NULL, NULL);
+
+        -- Arannis padne, Combat C končí
+
+        -- ------------- Combat B – kolo 3 (Elowen vstupuje) ----------
+        PERFORM sp_enter_combat(combat_b, elowen);
+
+        PERFORM sp_take_turn('spell_cast',  elowen , farin , 3);  -- heal
+        PERFORM sp_take_turn('spell_cast',  elowen , kaelen, 2);  -- IceArrow
+        PERFORM sp_take_turn('pass',        elowen , NULL , NULL);
+
+        PERFORM sp_take_turn('spell_cast',  nymeria, kaelen, 2);  -- IceArrow
+        PERFORM sp_take_turn('auto_attack', nymeria, kaelen, NULL);
+        PERFORM sp_take_turn('pass',        nymeria, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', farin  , kaelen, NULL);
+        PERFORM sp_take_turn('auto_attack', farin  , kaelen, NULL);
+        PERFORM sp_take_turn('pass',        farin  , NULL , NULL);
+
+        PERFORM sp_take_turn('spell_cast',  kaelen , kaelen, 8);  -- Smite
+        PERFORM sp_take_turn('auto_attack', kaelen , nymeria, NULL);
+        PERFORM sp_take_turn('pass',        kaelen , NULL, NULL);
+
+        -- ------------- Combat B – kolo 4 (doraž Kaelena) ------------
+        PERFORM sp_take_turn('spell_cast',  elowen , kaelen, 2);  -- IceArrow
+        PERFORM sp_take_turn('pass',        elowen , NULL, NULL);
+
+        PERFORM sp_take_turn('auto_attack', nymeria, kaelen, NULL);
+        PERFORM sp_take_turn('pass',        nymeria, NULL , NULL);
+
+        PERFORM sp_take_turn('auto_attack', farin  , kaelen, NULL);
+        PERFORM sp_take_turn('pass',        farin  , NULL , NULL);
+
+        -- Kaelen padne, Combat B končí
+
+        ----------------------------------------------------------------
+        -- 6. Post-combat B
+        ----------------------------------------------------------------
+        PERFORM sp_pick_item(nymeria, 3);   -- great potion
+        PERFORM sp_use_item(nymeria, 3, nymeria);
+
+        ----------------------------------------------------------------
+        -- 7. Dodatočné pick/drop mimo boja
+        ----------------------------------------------------------------
+        PERFORM sp_drop_item(sylvara, 2);
+        PERFORM sp_pick_item(oren   , 7);
+
+        PERFORM sp_pick_item(isolde , 6);
+        PERFORM sp_drop_item(isolde , 6);
+
+        PERFORM sp_use_item(arannis , 9, arannis);   -- buff (už mimo boja C)
+    END
+$$;
